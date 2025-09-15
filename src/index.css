@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+*{
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+
+.phone-input-container label {
+  display: none !important;
+}
+
+
+/* Dropdown container */
+.country-list {
+  border-radius: 10px;
+  box-shadow: 0px 5px 36.2px 0px #0000001A;
+  z-index: 9999;
+}
+
+/* Each country row */
+.country-list .country {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* spacing between flag & text */
+  padding: 6px 12px;
+}
+
+/* Fix flag misalignment */
+.country-list .country .flag {
+  position: relative !important;
+  top: 0 !important;
+  left: 0 !important;
+}
