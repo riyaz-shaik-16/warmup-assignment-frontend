@@ -1,5 +1,5 @@
 // MobileVerificationModal.js
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import styled from "@emotion/styled";
 import {
@@ -165,7 +165,7 @@ const SMSIcon = () => (
   </svg>
 );
 
-export default function MobileVerificationModal({ open = true, onClose, mobileNumber = "+91 92222*****442" }) {
+export default function MobileVerificationModal({ open , handleVerify, mobileNumber = "+91 92222*****442" }) {
   const {
     control,
     register,
@@ -173,12 +173,15 @@ export default function MobileVerificationModal({ open = true, onClose, mobileNu
     formState: { errors },
   } = useForm();
 
+  useEffect(()=>{
+    inputRef.current?.focus();
+  },[])
+
   const [isResending, setIsResending] = useState(false);
+  const inputRef = useRef();
 
   const onSubmit = (data) => {
-    toast.success("Mobile number verified successfully!", { position: "top-right" });
-    console.log("OTP:", data.otp);
-    onClose();
+    handleVerify(data.otp);
   };
 
   const handleResendOTP = () => {
@@ -195,7 +198,7 @@ export default function MobileVerificationModal({ open = true, onClose, mobileNu
   };
 
   return (
-    <StyledDialog open={open} onClose={onClose} maxWidth="sm">
+    <StyledDialog open={open} maxWidth="sm">
       <ModalContent>
         <HeaderSection>
           <Typography
@@ -267,6 +270,8 @@ export default function MobileVerificationModal({ open = true, onClose, mobileNu
             <InputLabel>Enter OTP</InputLabel>
             <TextField
               fullWidth
+              inputRef={inputRef}
+              autoFocus
               placeholder="Enter Your OTP Here"
               {...register("otp", {
                 required: "OTP is required",
@@ -334,8 +339,8 @@ export default function MobileVerificationModal({ open = true, onClose, mobileNu
 
           {/* Buttons */}
           <ButtonsContainer>
-            <CloseButton onClick={onClose}>Close</CloseButton>
-            <VerifyButton type="submit" variant="contained">
+            {/* <CloseButton onClick={onClose}>Close</CloseButton> */}
+            <VerifyButton type="submit" variant="contained" >
               Verify Mobile
             </VerifyButton>
           </ButtonsContainer>

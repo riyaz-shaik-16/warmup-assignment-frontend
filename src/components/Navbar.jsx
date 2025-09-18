@@ -11,6 +11,10 @@ const Header = styled(Box)`
   padding: 20px 40px;
   border-bottom: 1px solid #e0e0e0;
   background: #fff;
+  position:fixed;
+  top:0;
+  z-index:9999;
+  width:100%;
   
   @media (max-width: 768px) {
     padding: 16px 20px;
@@ -68,7 +72,8 @@ const SetupProgress = styled(Typography)`
 export default function CompanySetupNavbar({ 
   logoText = "Jobpilot", 
   progressText = "Setup Progress",
-  onLogoClick
+  onLogoClick,
+  style={}
 }) {
   const handleLogoClick = () => {
     if (onLogoClick) {
@@ -80,7 +85,7 @@ export default function CompanySetupNavbar({
   };
 
   return (
-    <Header>
+    <Header style={style}>
       <Logo onClick={handleLogoClick}>
         <LogoIcon>J</LogoIcon>
         <LogoText>{logoText}</LogoText>

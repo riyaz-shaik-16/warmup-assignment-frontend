@@ -19,8 +19,8 @@ import { useMediaQuery } from "react-responsive";
 const Container = styled(Box)`
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
   background: #fff;
+  margin-top:50px;
 `;
 
 const Header = styled(Box)`

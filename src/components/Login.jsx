@@ -7,14 +7,19 @@ import {
   TextField,
   Button,
   Typography,
-  FormHelperText,
-  Link,
+  FormHelperText
 } from "@mui/material";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/material.css";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useMediaQuery } from "react-responsive";
+
+import { useDispatch } from "react-redux";
+import { useMutation } from "@tanstack/react-query";
+import { setUser } from "../store/slices/auth.slice";
+import api from "../utils/axiosInstance"
+import { Link } from "react-router-dom";
 
 // Styled Components
 const Container = styled(Box)`
@@ -25,18 +30,20 @@ const Container = styled(Box)`
   background: #fff;
 `;
 
-const Card = styled(Box)`
-  display: flex;
-  background: #F8FAFF;
-  border-radius: 20px;
-  box-shadow: 0px 5px 36.2px 0px #8678FF40;
-  overflow: hidden;
-  max-width: 1200px;
-  width: 100%;
-  padding: 30px;
-  flex-direction: ${(props) => (props.isMobile ? "column" : "row")};
-  gap: 50px;
-`;
+const Card = styled(Box, {
+  shouldForwardProp: (prop) => prop !== "isMobile",  // prevent leak
+})(({ isMobile }) => ({
+  display: "flex",
+  background: "#F8FAFF",
+  borderRadius: "20px",
+  boxShadow: "0px 5px 36.2px 0px #8678FF40",
+  overflow: "hidden",
+  maxWidth: "1200px",
+  width: "100%",
+  padding: "30px",
+  flexDirection: isMobile ? "column" : "row",
+  gap: "50px",
+}));
 
 const GradientBox = styled(Box)`
   flex-shrink: 0;
@@ -50,11 +57,6 @@ const GradientBox = styled(Box)`
 
   width: 50%;
 
-  @media (max-width: 1024px) {
-    width: 500px;
-    height: 600px;
-  }
-
   @media (max-width: 768px) {
     width: 100%;
     height: 400px;
@@ -63,25 +65,31 @@ const GradientBox = styled(Box)`
 `;
 
 const FormBox = styled(Box)`
+  width:50%;
   flex: 1;
   padding: 20px 40px;
+  @media (max-width: 768px) {
+    width: 100%;
+    height: 400px;
+    margin-bottom: 20px;
+  }
 `;
 
 const StyledButton = styled(Button)`
   margin-top: 20px;
-  background: linear-gradient(90deg, #4a6cf7, #6a5cff);
+  background: #5C7FFF;
   text-transform: none;
   font-weight: bold;
-  border-radius: 25px;
-  padding: 12px 0;
+  height:45px;
+  border-radius: 36px;
   &:hover {
     opacity: 0.9;
-    background: linear-gradient(90deg, #4a6cf7, #6a5cff);
+    background: #5C7FFF;
   }
 `;
 
 const InputContainer = styled(Box)`
-  width: 430px;
+  width: 100%;
   height: auto;
   border-radius: 10px;
   display: flex;
@@ -125,20 +133,51 @@ const sharedInputStyle = {
 };
 
 export default function CompanyLogin() {
+
   const { handleSubmit, control } = useForm({
     defaultValues: {
       email: "",
       password: "",
-      phone: "",
     },
   });
 
+  const loginUser = async (formData) => {
+    const {data} = await api.post("/auth/login",formData);
+    console.log("Data from server: ",data);
+    return data.data;
+    
+    
+  }
+
+  const dispatch = useDispatch();
+
+  const mutation = useMutation({
+    mutationFn:loginUser,
+    onSuccess:(data)=>{
+      console.log("Data: ",data);
+      toast.success("Logged in Successfully!")
+      localStorage.setItem("token",data.token);
+      dispatch(setUser({token:data.token,user:{}}));
+    },
+    onError:(error)=>{
+      toast.error(error.response.data.message || "Internal server error!")
+      console.log("Error: ",error);
+    }
+    
+  })
+
+  const onSubmit = (data)=>{
+      console.log("Data: ",data);
+      mutation.mutate(data);
+  }
+
   const isMobile = useMediaQuery({ query: "(max-width: 768px)" });
 
-  const onSubmit = (data) => {
-    toast.success("Login successful!", { position: "top-right" });
-    console.log(data);
-  };
+  // const onSubmit = (data) => {
+  //   toast.success("Login successful!", { position: "top-right" });
+  //   console.log(data);
+  // };
+
 
   return (
     <Container>
@@ -193,45 +232,6 @@ export default function CompanyLogin() {
               />
             </InputContainer>
 
-            {/* Mobile */}
-            <InputContainer mt="16px">
-              <InputLabel>Mobile Number</InputLabel>
-              <Controller
-                name="phone"
-                control={control}
-                render={({ field }) => (
-                  <PhoneInput
-                    {...field}
-                    country={"in"}
-                    inputStyle={{
-                      width: "100%",
-                      height: "42px",
-                      borderRadius: "10px",
-                      backgroundColor: "#F8FAFF",
-                      boxShadow: "0px 5px 36.2px 0px #0000001A",
-                      border: "none",
-                      paddingLeft: "50px",
-                      fontSize: "14px",
-                      fontFamily: "'Inter', sans-serif",
-                    }}
-                    buttonStyle={{
-                      border: "none",
-                      background: "transparent",
-                      marginLeft: "10px",
-                      borderRadius: "10px",
-                    }}
-                    dropdownStyle={{
-                      position: "absolute",
-                      top: "45px",
-                      backgroundColor: "#fff",
-                      zIndex: 9999,
-                      fontFamily: "'Inter', sans-serif",
-                    }}
-                    specialLabel=""
-                  />
-                )}
-              />
-            </InputContainer>
 
             {/* Password */}
             <InputContainer mt="16px">
@@ -246,11 +246,12 @@ export default function CompanyLogin() {
                     size="small"
                     type="password"
                     variant="outlined"
+                    autoComplete="new-password"
                     InputProps={{ sx: sharedInputStyle }}
                   />
                 )}
               />
-              <Link href="#" sx={smallLinkStyle}>
+              <Link href="#" style={{textDecoration:"none",color:"#5C7FFF"}}>
                 Forgot Password?
               </Link>
             </InputContainer>
@@ -263,9 +264,7 @@ export default function CompanyLogin() {
             {/* Sign Up Link */}
             <Typography align="center" sx={{ mt: 2, fontFamily: "Inter, sans-serif", fontSize: 14 }}>
               Don’t have an account?{" "}
-              <Link href="#" sx={smallLinkStyle}>
-                Sign up
-              </Link>
+              <Link to="/register" style={{textDecoration:"none",color:"#5C7FFF"}}>Signup</Link>
             </Typography>
           </Box>
         </FormBox>

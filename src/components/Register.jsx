@@ -1,5 +1,5 @@
 // CompanyRegister.js
-import React from "react";
+import React, { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import styled from "@emotion/styled";
 import {
@@ -15,6 +15,14 @@ import "react-phone-input-2/lib/material.css";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useMediaQuery } from "react-responsive";
+import { Link, useNavigate } from "react-router-dom";
+
+import { useMutation } from "@tanstack/react-query";
+import api from "../utils/axiosInstance";
+import Verify from "./Verify";
+import { signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
+import { auth } from "../utils/firebase"
+
 
 // Styled Components
 const Container = styled(Box)`
@@ -25,21 +33,22 @@ const Container = styled(Box)`
   background: #fff;
 `;
 
-const Card = styled(Box)`
-  display: flex;
-  background: #F8FAFF;
-  border-radius: 20px;
-  box-shadow: 0px 5px 36.2px 0px #8678FF40;
-  overflow: hidden;
-  max-width:1200px;
-  width: 100%;
-  padding: 30px;
-  flex-direction: ${(props) => (props.isMobile ? "column" : "row")};
-  gap:50px
-`;
+const Card = styled(Box, {
+  shouldForwardProp: (prop) => prop !== "isMobile", // block custom prop
+})(({ isMobile }) => ({
+  display: "flex",
+  background: "#F8FAFF",
+  borderRadius: "20px",
+  boxShadow: "0px 5px 36.2px 0px #8678FF40",
+  overflow: "hidden",
+  maxWidth: "1200px",
+  width: "100%",
+  padding: "30px",
+  flexDirection: isMobile ? "column" : "row",
+  gap: "50px",
+}));
 
 const GradientBox = styled(Box)`
-  flex-shrink: 0;
   background: linear-gradient(180deg, #F9D8FF, #6647D6);
   box-shadow: 0px 5px 36.2px 0px #8678FF40;
   display: flex;
@@ -47,18 +56,8 @@ const GradientBox = styled(Box)`
   justify-content: center;
   align-items: center;
   overflow: hidden;
-
-  /* Desktop */
   width: 50%;
-  height: 726px;
 
-  /* Tablet */
-  @media (max-width: 1024px) {
-    width: 500px;
-    height: 600px;
-  }
-
-  /* Mobile */
   @media (max-width: 768px) {
     width: 100%;
     height: 400px;
@@ -67,26 +66,29 @@ const GradientBox = styled(Box)`
 `;
 
 const FormBox = styled(Box)`
-  flex: 1;
+  width:50%;
   padding: 20px 40px;
+  @media (max-width: 768px) {
+    width: 100%;
+    margin-bottom: 20px;
+  }
 `;
 
 const StyledButton = styled(Button)`
   margin-top: 20px;
-  background: linear-gradient(90deg, #4a6cf7, #6a5cff);
+  background:#5C7FFF;
   text-transform: none;
   font-weight: bold;
   border-radius: 25px;
   padding: 12px 0;
   &:hover {
     opacity: 0.9;
-    background: linear-gradient(90deg, #4a6cf7, #6a5cff);
+    background: #5C7FFF;
   }
 `;
 
 // Reusable Input Container
 const InputContainer = styled(Box)`
-  width: 430px;
   height: 68px;
   border-radius: 10px;
   display: flex;
@@ -122,7 +124,7 @@ const sharedInputStyle = {
 const PasswordsContainer = styled(Box)`
   display: flex;
   gap: 16px;
-  width: 430px;
+  width: 100%;
   margin-top: 16px;
 
   @media (max-width: 768px) {
@@ -133,7 +135,7 @@ const PasswordsContainer = styled(Box)`
 
 // Terms container
 const TermsContainer = styled(Box)`
-  width: 430px;
+  width: 100%;
   border-radius: 10px;
   margin-top: 16px;
   display: flex;
@@ -161,24 +163,146 @@ export default function CompanyRegister() {
     setValue,
     watch,
     formState: { errors },
-  } = useForm();
+  } = useForm({
+    defaultValues: {
+      full_name: "",
+      mobile_no: "",
+      email: "",
+      gender: "",
+      password: "",
+      confirm_password: "",
+      terms: false,
+    },
+  });
+
+  const [linkSent, setLinkSent] = useState(false);
+  const navigate = useNavigate();
+
+  const registerUser = async (formData) => {
+    const { data } = await api.post("/auth/register", formData);
+    return data.data;
+  };
+
+  const mutation = useMutation({
+    mutationFn: registerUser,
+    onSuccess: (data) => {
+      console.log("Data (In on success): ", data);
+      sendOtp(mobileNo);
+    },
+    onError: (error) => {
+      console.log("Error: ", error.response.data.message);
+      toast.error(`Registration failed: ${error.response.data.message}`);
+    },
+  });
 
   const isMobile = useMediaQuery({ query: "(max-width: 768px)" });
 
   const onSubmit = (data) => {
-    toast.success("Registration successful!", { position: "top-right" });
-    console.log(data);
+    const genderMap = { male: 'M', female: 'F', other: 'O' };
+    const payload = { ...data, gender: genderMap[data.gender] || "" };
+
+    console.log("Data sent to API: ", payload);
+    mutation.mutate(payload);
   };
 
   const options = ["male", "female", "other"];
   const selectedGender = watch("gender");
+  const mobileNo = watch("mobile_no");
+  const email = watch("email");
+
+  const sendOtp = async (pn) => {
+    try {
+      const phoneNumber = `+${pn}`;
+      const testNumbers = {
+        "+919999999999": "302630",
+      };
+
+      // console.log("Phone number: ", phoneNumber);
+
+      if (!testNumbers[phoneNumber]) {
+        console.warn("Use a Firebase test number for Spark plan.");
+        toast.warning("Use a Firebase test number for Spark plan.");
+        return;
+      }
+
+      window.confirmationResult = {
+        confirm: async (otp) => {
+          console.log("OTP given by user: ", otp);
+          console.log("Actual otp: ", testNumbers[phoneNumber]);
+          if (otp === testNumbers[phoneNumber]) {
+            return { user: { phoneNumber } }; // Simulate user object
+          } else {
+            toast.error("Invalid OTP ❌");
+            throw new Error("Invalid OTP ❌");
+          }
+        },
+      };
+
+      setLinkSent(true); // Show modal
+      console.log(`OTP sent ✅ (Test Number: ${phoneNumber})`);
+      toast.success("OTP sent!");
+    } catch (error) {
+      console.error("Error sending OTP ❌", error);
+      toast.error("Error sending OTP ❌");
+    }
+  };
+
+  // Verify OTP entered by user
+  const verifyOtp = async (otp) => {
+    try {
+      console.log("otp got to verify: ", otp);
+      const result = await window.confirmationResult.confirm(otp);
+      // console.log("Phone verified ✅", result.user);
+      
+      verifyOtpMutation.mutate(email);
+    } catch (error) {
+      console.error("Invalid OTP ❌", error);
+      toast.error("Invalid OTP, try again!");
+    }
+  };
+
+  const handleVerifyOtp = async (email) => {
+    const { data } = await api.post("/auth/verify-mobile", { email });
+    return data.data;
+  };
+
+  const verifyOtpMutation = useMutation({
+    mutationFn: handleVerifyOtp,
+    onSuccess: (data) => {
+      toast.success("OTP verification complete! Redirecting...");
+      navigate("/login");
+    },
+    onError: (error) => {
+      console.log("Error in verify otp mutation: ", error.response.data.message);
+      toast.error(`OTP verification failed: ${error.response.data.message}`);
+    },
+  });
 
   const handleSelect = (value) => {
     setValue("gender", value, { shouldValidate: true });
   };
 
+  const formatPhoneNumber = (mobile_no) => {
+    const str = mobile_no.toString();
+
+    if (str.length <= 8) {
+      return `+${str}`;
+    }
+
+    const firstFive = str.slice(0, 5);
+    const lastThree = str.slice(-3);
+    const masked = firstFive + "*****" + lastThree;
+
+    return `+${masked}`;
+  };
+
+
+
+
   return (
     <Container>
+      {linkSent && <Verify open={true} mobileNumber={formatPhoneNumber(mobileNo)} handleVerify={verifyOtp} />}
+      <Box id="recaptcha-container"></Box>
       <Card isMobile={isMobile}>
         <GradientBox />
         <FormBox>
@@ -188,7 +312,7 @@ export default function CompanyRegister() {
               fontWeight: 600,
               fontSize: "32px",
               textAlign: "center",
-              marginBottom:'20px'
+              marginBottom: "20px",
             }}
             gutterBottom
           >
@@ -198,28 +322,32 @@ export default function CompanyRegister() {
           <form onSubmit={handleSubmit(onSubmit)}>
             {/* Full Name */}
             <InputContainer>
-              <InputLabel>Full Name</InputLabel>
+              <InputLabel htmlFor="full_name">Full Name</InputLabel>
               <TextField
                 fullWidth
+                id="full_name"
                 placeholder="Enter Your Full Name"
-                {...register("fullName", { required: "Full Name is required" })}
-                error={!!errors.fullName}
-                helperText={errors.fullName?.message}
+                {...register("full_name", { required: "Full Name is required" })}
+                error={!!errors.full_name}
+                helperText={errors.full_name?.message}
                 InputProps={{ sx: sharedInputStyle }}
               />
             </InputContainer>
 
             {/* Mobile No */}
             <InputContainer mt="16px">
-            <InputLabel>Mobile No</InputLabel>
+              <InputLabel htmlFor="mobile_no">Mobile No</InputLabel>
               <Controller
-                name="mobileNo"
+                name="mobile_no"
+                id="mobile_no"
                 control={control}
                 rules={{ required: "Mobile No is required" }}
                 render={({ field }) => (
                   <PhoneInput
-                    country={"in"}
                     {...field}
+                    id="mobile_no"
+                    name="mobile_no"
+                    country="in"
                     containerStyle={{ width: "100%" }}
                     inputStyle={{
                       width: "100%",
@@ -245,20 +373,23 @@ export default function CompanyRegister() {
                       zIndex: 9999,
                       fontFamily: "'Inter', sans-serif",
                     }}
-                    specialLabel="" // removes default PhoneInput label
+                    specialLabel=""
                   />
                 )}
               />
-              {errors.mobileNo && (
-                <FormHelperText error>{errors.mobileNo.message}</FormHelperText>
+              {errors.mobile_no && (
+                <FormHelperText error>{errors.mobile_no.message}</FormHelperText>
               )}
             </InputContainer>
 
             {/* Organization Email */}
             <InputContainer mt="16px">
-              <InputLabel>Organization Email</InputLabel>
+              <InputLabel htmlFor="email">Organization Email</InputLabel>
               <TextField
                 fullWidth
+                id="email"
+                name="email"
+                autoComplete="email"
                 placeholder="Enter Organization Email"
                 {...register("email", {
                   required: "Email is required",
@@ -271,7 +402,7 @@ export default function CompanyRegister() {
             </InputContainer>
 
             {/* Gender */}
-            <Box mt={2} sx={{ width: "430px" }}>
+            <Box mt={2} sx={{ width: "100%" }}>
               <InputLabel>Gender</InputLabel>
               <Box sx={{ display: "flex", gap: 2 }}>
                 {options.map((value) => {
@@ -292,13 +423,13 @@ export default function CompanyRegister() {
                         fontFamily: "Inter, sans-serif",
                         fontSize: "14px",
                         fontWeight: isSelected ? 600 : 500,
-                        backgroundColor: isSelected ? "#000" : "#fff",
+                        backgroundColor: isSelected ? "#5C7FFF" : "#fff",
                         color: isSelected ? "#fff" : "#000",
                         boxShadow: "0px 5px 36.2px 0px #0000001A",
                         cursor: "pointer",
                         transition: "all 0.2s",
                         "&:hover": {
-                          backgroundColor: isSelected ? "#000" : "#eee",
+                          backgroundColor: isSelected ? "#5C7FFF" : "#eee",
                         },
                       }}
                     >
@@ -315,27 +446,33 @@ export default function CompanyRegister() {
             {/* Passwords */}
             <PasswordsContainer>
               <InputContainer>
-                <InputLabel>Password</InputLabel>
+                <InputLabel htmlFor="password">Password</InputLabel>
                 <TextField
+                  id="password"
                   type="password"
                   fullWidth
                   placeholder="Enter Password"
                   {...register("password", { required: "Password is required" })}
                   error={!!errors.password}
+                  autoComplete="new-password"
                   helperText={errors.password?.message}
                   InputProps={{ sx: sharedInputStyle }}
                 />
               </InputContainer>
 
               <InputContainer>
-                <InputLabel>Confirm Password</InputLabel>
+                <InputLabel htmlFor="confirm_password">Confirm Password</InputLabel>
                 <TextField
+                  id="confirm_password"
                   type="password"
                   fullWidth
+                  autoComplete="new-password"
                   placeholder="Confirm Password"
-                  {...register("confirmPassword", { required: "Confirm Password is required" })}
-                  error={!!errors.confirmPassword}
-                  helperText={errors.confirmPassword?.message}
+                  {...register("confirm_password", {
+                    required: "Confirm Password is required",
+                  })}
+                  error={!!errors.confirm_password}
+                  helperText={errors.confirm_password?.message}
                   InputProps={{ sx: sharedInputStyle }}
                 />
               </InputContainer>
@@ -354,21 +491,31 @@ export default function CompanyRegister() {
                   ml: 1,
                 }}
               >
-                All your information is collected, stored, and processed as per our data
-                processing guidelines. By signing on, you agree to our{" "}
+                All your information is collected, stored, and processed as per our
+                data processing guidelines. By signing on, you agree to our{" "}
                 <a href="#" style={{ color: "#6647D6" }}>Privacy Policy</a> and{" "}
                 <a href="#" style={{ color: "#6647D6" }}>Terms of Use</a>.
               </Typography>
             </TermsContainer>
-            {errors.terms && <FormHelperText error>You must accept the terms to continue</FormHelperText>}
+            {errors.terms && (
+              <FormHelperText error>
+                You must accept the terms to continue
+              </FormHelperText>
+            )}
 
             {/* Submit */}
             <StyledButton type="submit" variant="contained" fullWidth>
-              Register
+              {mutation.isPending ? "Wait a sec.." : "Register"}
             </StyledButton>
 
             <Typography align="center" marginTop={2}>
-              Already have an account? <a href="#">Login</a>
+              Already have an account?{" "}
+              <Link
+                to="/login"
+                style={{ textDecoration: "none", color: "#5C7FFF" }}
+              >
+                Login
+              </Link>
             </Typography>
           </form>
         </FormBox>
